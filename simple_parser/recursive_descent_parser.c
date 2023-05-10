@@ -1,16 +1,36 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
+
+typedef enum
+{
+	INT,
+	FLT
+} kind;
+
+struct num
+{
+	kind t;
+	union
+	{
+		int i;
+		float f;
+	} val;
+} num_value;
 
 void get_token();
-void expression();
-void term();
-void factor();
+struct num expression();
+struct num term();
+struct num factor();
+void error(int);
 
 enum
 {
 	NNULL,
 	PLUS,
+	MINUS,
 	STAR,
+	SLASH,
 	NUMBER,
 	LPAREN,
 	RPAREN,
@@ -22,26 +42,43 @@ char ch = ' ';
 int main(void)
 {
 	get_token();
-	expression();
+	struct num result = expression();
 	if (token != END)
 	{
-		error();
+		error(3);
+	}
+	if (result.t == INT)
+	{
+		printf("%d\n", result.val.i);
+	}
+	else if (result.t == FLT)
+	{
+		printf("%f\n", result.val.f);
 	}
 	return 0;
 }
 
-void error()
+void error(int i)
 {
-	// error handling
-	printf("Syntax error!\n");
+	switch (i)
+	{
+	case 1:
+		printf("error: number of '(' expected. \n");
+		break;
+	case 2:
+		printf("error: ')' expected. \n");
+		break;
+	case 3:
+		printf("error: EOF expected. \n");
+		break;
+	}
 	exit(1);
 }
 
 void get_token()
 {
 	while (ch == ' ')
-	{
-		// skip white spaces
+	{ // skip white spaces
 		ch = getchar();
 	}
 
@@ -50,12 +87,21 @@ void get_token()
 		token = PLUS;
 		ch = getchar();
 	}
+	else if (ch == '-')
+	{
+		token = MINUS;
+		ch = getchar();
+	}
 	else if (ch == '*')
 	{
 		token = STAR;
 		ch = getchar();
 	}
-	// else if(ch >= '0' && ch <= '9') {
+	else if (ch == '/')
+	{
+		token = SLASH;
+		ch = getchar();
+	}
 	else if (isdigit(ch))
 	{
 		int num = 0;
@@ -63,6 +109,27 @@ void get_token()
 		{
 			num = num * 10 + (ch - '0');
 			ch = getchar();
+		}
+
+		if (ch == '.')
+		{
+			// float
+			ch = getchar();
+			float fnum = num;
+			float d = 0.1;
+			while (isdigit(ch))
+			{
+				fnum += (ch - '0') * d;
+				d *= 0.1;
+				ch = getchar();
+			}
+			num_value.t = FLT;
+			num_value.val.f = fnum;
+		}
+		else
+		{ // integer
+			num_value.t = INT;
+			num_value.val.i = num;
 		}
 		token = NUMBER;
 	}
@@ -77,53 +144,148 @@ void get_token()
 		ch = getchar();
 	}
 	else if (ch == '\n' || ch == EOF)
-	{ // end of input
+	{
+		// end of input
 		token = END;
 	}
 	else
 	{
-		error();
+		error(3);
 	}
 }
 
-void expression()
+struct num expression()
 {
-	term();
-	while (token == PLUS)
+	struct num result = term();
+	while (token == PLUS || token == MINUS)
 	{
-		get_token();
-		term();
+		if (token == PLUS)
+		{
+			get_token();
+			struct num termval = term();
+
+			if (result.t == INT && termval.t == INT)
+			{
+				result.val.i += termval.val.i;
+			}
+			else if (result.t == INT && termval.t == FLT)
+			{
+				result.t = FLT;
+				result.val.f = result.val.i + termval.val.f;
+			}
+			else if (result.t == FLT && termval.t == INT)
+			{
+				result.val.f += termval.val.i;
+			}
+			else
+			{
+				result.val.f += termval.val.f;
+			}
+		}
+		else if (token == MINUS)
+		{
+			get_token();
+			struct num termval = term();
+
+			if (result.t == INT && termval.t == INT)
+			{
+				result.val.i -= termval.val.i;
+			}
+			else if (result.t == INT && termval.t == FLT)
+			{
+				result.t = FLT;
+				result.val.f = result.val.i - termval.val.f;
+			}
+			else if (result.t == FLT && termval.t == INT)
+			{
+				result.val.f -= termval.val.i;
+			}
+			else
+			{
+				result.val.f -= termval.val.f;
+			}
+		}
 	}
+	return result;
 }
 
-void term()
+struct num term()
 {
-	factor();
-	while (token == STAR)
+	struct num result = factor();
+	while (token == STAR || token == SLASH)
 	{
-		get_token();
-		factor();
+		if (token == STAR)
+		{
+			get_token();
+			struct num factorval = factor();
+
+			if (result.t == INT && factorval.t == INT)
+			{
+				result.val.i *= factorval.val.i;
+			}
+			else if (result.t == INT && factorval.t == FLT)
+			{
+				result.t = FLT;
+				result.val.f = result.val.i * factorval.val.f;
+			}
+			else if (result.t == FLT && factorval.t == INT)
+			{
+				result.val.f *= factorval.val.i;
+			}
+			else
+			{
+				result.val.f *= factorval.val.f;
+			}
+		}
+		else if (token == SLASH)
+		{
+			get_token();
+			struct num factorval = factor();
+
+			if (result.t == INT && factorval.t == INT)
+			{
+				result.val.i /= factorval.val.i;
+			}
+			else if (result.t == INT && factorval.t == FLT)
+			{
+				result.t = FLT;
+				result.val.f = result.val.i / factorval.val.f;
+			}
+			else if (result.t == FLT && factorval.t == INT)
+			{
+				result.val.f /= factorval.val.i;
+			}
+			else
+			{
+				result.val.f /= factorval.val.f;
+			}
+		}
 	}
+	return result;
 }
 
-void factor()
+struct num factor()
 {
+	struct num result;
 	if (token == NUMBER)
 	{
+		result = num_value;
 		get_token();
 	}
 	else if (token == LPAREN)
 	{
 		get_token();
-		expression();
+		result = expression();
 
 		if (token == RPAREN)
 		{
 			get_token();
 		}
 		else
-			error();
+			error(2);
 	}
 	else
-		error();
+		error(1);
+
+	return result;
 }
